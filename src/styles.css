@@ -1,0 +1,581 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap");
+:root {
+  font-family: Manrope, sans-serif;
+  color: #e8edf7;
+  background: #111827;
+  font-synthesis: none;
+  --ink: #e8edf7;
+  --muted: #8995af;
+  --line: #2a3449;
+  --panel: #182237;
+  --blue: #a7c9ff;
+  --detail: #8ca9de;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 1100px;
+  background: #111827;
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 64px 140px 1fr 58px;
+  background:
+    radial-gradient(circle at 70% 30%, #1c2740 0, #111827 44%), #111827;
+}
+.app-shell.is-expanded {
+  grid-template-rows: 0px 0px 1fr 58px;
+}
+.app-shell.is-expanded .topbar,
+.app-shell.is-expanded .map-header {
+  display: none;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 38px;
+  border-bottom: 1px solid var(--line);
+  background: #111827d9;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.brand-mark {
+  color: #a7c9ff;
+  font-size: 20px;
+}
+.crumb {
+  color: #687590;
+  font-weight: 500;
+}
+.top-actions,
+.header-actions,
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.saved,
+.status-note {
+  font:
+    12px "DM Mono",
+    monospace;
+  color: #7f8da8;
+}
+.save-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8bd6a1;
+  margin-right: 7px;
+}
+.icon-button,
+.primary-button,
+.mode-toggle {
+  border: 1px solid #33405a;
+  color: #cbd5e8;
+  background: #1b263b;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.icon-button {
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+}
+.zoom-label {
+  color: #71809b;
+  font:
+    11px "DM Mono",
+    monospace;
+}
+.map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 30px 12px;
+  border-bottom: 1px solid #263249;
+}
+.eyebrow {
+  font:
+    10px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: #7d8ba5;
+}
+.eyebrow span {
+  color: #6ca6e8;
+  margin: 0 5px;
+}
+.map-header h1 {
+  font-size: 31px;
+  letter-spacing: -0.055em;
+  margin: 6px 0 4px;
+  color: #f1f5fc;
+}
+.map-header p {
+  margin: 0;
+  color: #8794ad;
+  font-size: 13px;
+}
+.primary-button {
+  height: 38px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #b8d3ff;
+  border-color: #b8d3ff;
+  color: #172139;
+}
+.canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    linear-gradient(#202b40 1px, transparent 1px),
+    linear-gradient(90deg, #202b40 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center;
+  background-color: #141e32;
+}
+.map-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.map-canvas.is-editing {
+  cursor: default;
+}
+.map-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.edge-line {
+  fill: none;
+  stroke: #687895;
+  stroke-width: 1.4;
+  opacity: 0.8;
+  pointer-events: stroke;
+}
+.edge-group {
+  cursor: pointer;
+  transition: opacity 0.35s ease;
+}
+.edge-group.dimmed {
+  opacity: 0.18;
+}
+.edge-group:hover .edge-line {
+  stroke: #a5c8fa;
+  stroke-width: 2;
+}
+.edge-label {
+  fill: #7887a2;
+  font:
+    10px "DM Mono",
+    monospace;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.connecting-line {
+  stroke: #a8caff;
+  stroke-dasharray: 5 5;
+}
+.map-node {
+  position: absolute;
+  padding: 17px 17px 14px;
+  border: 1px solid #5277a9;
+  border-radius: 8px;
+  box-shadow: 0 16px 30px #090f1c3b;
+  transition:
+    box-shadow 0.18s,
+    border-color 0.18s,
+    transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.4s ease;
+  user-select: none;
+}
+.map-node.concept {
+  width: 300px;
+  min-height: 196px;
+  padding: 21px 21px 16px;
+  background: linear-gradient(145deg, #344d74, #273c63);
+}
+.map-node.detail {
+  width: 208px;
+  min-height: 150px;
+  padding: 14px 14px 12px;
+  background: linear-gradient(145deg, #273b61, #203151);
+  border-color: #45658f;
+}
+.map-node:hover,
+.map-node.selected {
+  border-color: #c3dcff;
+  box-shadow:
+    0 0 0 3px #93bfff25,
+    0 20px 36px #080e1b76;
+}
+.map-node.focused {
+  z-index: 6;
+  width: 440px;
+  padding: 24px 24px 20px;
+  border-color: #c3dcff;
+  box-shadow:
+    0 0 0 5px #93bfff40,
+    0 30px 60px #05091090;
+}
+.node-kicker {
+  display: flex;
+  justify-content: space-between;
+  color: #a7c3eb;
+  font:
+    9px "DM Mono",
+    monospace;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+}
+.node-kicker svg {
+  opacity: 0.45;
+}
+.expand-toggle {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.45;
+}
+.expand-toggle:hover {
+  opacity: 1;
+}
+.map-node input,
+.map-node textarea {
+  display: block;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: #ecf3ff;
+  background: transparent;
+  resize: none;
+}
+.map-node input {
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  margin-bottom: 9px;
+}
+.map-node.concept input {
+  font-size: 20px;
+}
+.map-node.detail input {
+  font-size: 15px;
+}
+.map-node textarea {
+  font-size: 11px;
+  line-height: 1.55;
+  color: #b7c6de;
+  height: 62px;
+}
+.map-node.concept textarea {
+  font-size: 12.5px;
+}
+.map-node.detail textarea {
+  font-size: 10px;
+  field-sizing: content;
+  height: auto;
+  min-height: 48px;
+  overflow: hidden;
+}
+.map-node.focused textarea {
+  font-size: 13px;
+  field-sizing: content;
+  height: auto;
+  min-height: 90px;
+  overflow: hidden;
+}
+.map-node input:read-only,
+.map-node textarea:read-only {
+  cursor: inherit;
+}
+.generate-button {
+  position: absolute;
+  left: 16px;
+  bottom: -31px;
+  border: 0;
+  color: #9bbef2;
+  background: transparent;
+  font:
+    10px "DM Mono",
+    monospace;
+  padding: 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.map-node:hover .generate-button,
+.map-node.selected .generate-button {
+  opacity: 1;
+}
+.generate-button:disabled {
+  opacity: 0.55;
+}
+.connect-handle {
+  position: absolute;
+  right: -12px;
+  top: calc(50% - 12px);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #b7d3ff;
+  background: #263d64;
+  color: #c9ddff;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.map-node:hover .connect-handle,
+.map-node.selected .connect-handle {
+  opacity: 1;
+}
+.delete-node {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  border: 0;
+  background: transparent;
+  color: #b7c1d4;
+  padding: 3px;
+}
+.canvas-hint {
+  color: #77869f;
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.hint-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6b9ed9;
+  margin-right: 6px;
+}
+.context-menu {
+  position: fixed;
+  z-index: 10;
+  width: 190px;
+  padding: 9px;
+  background: #1b273e;
+  border: 1px solid #3b4b68;
+  border-radius: 7px;
+  box-shadow: 0 16px 35px #080d18aa;
+}
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  color: #d3dded;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.context-menu button:hover {
+  background: #2a3a57;
+}
+.menu-label {
+  display: block;
+  padding: 3px 8px 7px;
+  color: #73819b;
+  font:
+    9px "DM Mono",
+    monospace;
+}
+.menu-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.concept-swatch {
+  background: #8db6f0;
+}
+.detail-swatch {
+  background: #6689c0;
+}
+.menu-rule {
+  display: block;
+  height: 1px;
+  background: #30405a;
+  margin: 5px 0;
+}
+.danger-menu {
+  color: #e59b9b !important;
+}
+.relation-popover {
+  position: absolute;
+  z-index: 8;
+  background: #f0f4fb;
+  color: #172139;
+  box-shadow: 0 20px 50px #05091088;
+  border: 1px solid #cad8ed;
+}
+.close-button {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  border: 0;
+  background: transparent;
+  color: #60708b;
+}
+.relation-popover {
+  right: 34px;
+  top: 28px;
+  width: 270px;
+  padding: 20px;
+  border-radius: 8px;
+}
+.relation-popover p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 13px 0;
+  color: #52627d;
+}
+.relation-popover p span {
+  color: #8298b9;
+  margin: 0 4px;
+}
+.relation-popover input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #c9d6e8;
+  background: transparent;
+  padding: 6px 0;
+  color: #1e2d48;
+  outline: 0;
+  font-size: 12px;
+}
+.error-toast {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
+  z-index: 12;
+  background: #4f2530;
+  color: #ffd9df;
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+.error-toast button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 38px;
+  border-top: 1px solid var(--line);
+  background: #111827;
+}
+.mode-toggle {
+  padding: 8px 12px;
+  color: #95a5bf;
+  font:
+    11px "DM Mono",
+    monospace;
+}
+.mode-toggle.active {
+  color: #bdd7ff;
+  border-color: #536f9b;
+}
+.legend {
+  color: #8896ad;
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+.concept-dot {
+  background: #98bce9;
+}
+.detail-dot {
+  background: #6689c0;
+}
+.legend-line {
+  display: block;
+  width: 15px;
+  height: 1px;
+  background: #75849d;
+}
+kbd {
+  padding: 2px 5px;
+  border: 1px solid #35435b;
+  border-radius: 3px;
+  color: #9eacc2;
+  font:
+    10px "DM Mono",
+    monospace;
+}
+@media (max-width: 1200px) {
+  body {
+    min-width: 900px;
+  }
+  .map-header {
+    padding-left: 30px;
+    padding-right: 30px;
+  }
+  .topbar,
+  .statusbar {
+    padding-left: 25px;
+    padding-right: 25px;
+  }
+}
