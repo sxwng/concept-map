@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Eye, Grip, Link2, Maximize2, Pencil, Sparkles, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Download, Eye, Grip, Link2, Maximize2, Pencil, Sparkles, Trash2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import './styles.css'
 
 type NodeKind = 'concept' | 'detail'
@@ -10,28 +10,148 @@ type ContextMenu = { x: number; y: number; mapX: number; mapY: number } | null
 
 // initial nodes for testing
 const initialNodes: MapNode[] = [
-  { id: 'quantum', kind: 'concept', title: 'Quantum chemistry', body: 'The behavior of matter and energy at atomic scales.', x: 760, y: 260 },
-  { id: 'duality', kind: 'concept', title: 'Wave-particle duality', body: 'Quantum objects can display wave-like and particle-like properties.', x: 330, y: 110 },
-  { id: 'uncertainty', kind: 'concept', title: 'Uncertainty principle', body: 'Momentum and position cannot both be known precisely.', x: 1110, y: 100 },
-  { id: 'catastrophe', kind: 'detail', title: 'Ultraviolet catastrophe', body: 'Classical physics predicted that hot objects emit infinite energy at short wavelengths. Planck solved the crisis by proposing quantized energy.', x: 90, y: 410 },
-  { id: 'photoelectric', kind: 'detail', title: 'Photoelectric effect', body: 'Light knocks electrons from a material in discrete packets of energy, showing light has particle-like behavior.', x: 480, y: 500 },
-  { id: 'electron', kind: 'detail', title: 'Electron microscope', body: 'A practical example of wave behavior: electron wavelengths enable imaging at a scale smaller than visible light.', x: 1060, y: 420 },
+  { id: 'concept', kind: 'concept', title: 'Concept Box', body: 'Big concepts go here!', x: 760, y: 260 },
+  { id: 'detail', kind: 'detail', title: 'Detail Box', body: 'Specific details go here!', x: 330, y: 110 }
 ]
 const initialEdges: MapEdge[] = [
-  { id: 'e1', from: 'quantum', to: 'duality', label: 'provides the framework for' },
-  { id: 'e2', from: 'quantum', to: 'uncertainty', label: 'reveals limits within' },
-  { id: 'e3', from: 'duality', to: 'catastrophe', label: 'was suggested by' },
-  { id: 'e4', from: 'duality', to: 'photoelectric', label: 'is demonstrated by' },
-  { id: 'e5', from: 'uncertainty', to: 'electron', label: 'shapes the design of' },
+  { id: 'e1', from: 'concept', to: 'detail', label: 'provides the framework for' },
 ]
 const nodeSizes: Record<NodeKind, { width: number; height: number }> = {
   concept: { width: 300, height: 196 },
   detail: { width: 208, height: 150 },
 }
 
+function downloadTextFile(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function validateGraph(nodes: MapNode[], edges: MapEdge[]) {
+  if (nodes.length === 0) throw new Error('The file has no nodes.')
+  const ids = new Set<string>()
+  for (const node of nodes) {
+    if (ids.has(node.id)) throw new Error(`Duplicate node id "${node.id}".`)
+    ids.add(node.id)
+  }
+  for (const edge of edges) {
+    if (!ids.has(edge.from) || !ids.has(edge.to)) throw new Error(`Relationship "${edge.id}" references a node that doesn't exist.`)
+  }
+}
+
+function parseImportedJSON(text: string): { nodes: MapNode[]; edges: MapEdge[]; title?: string } {
+  let data: unknown
+  try { data = JSON.parse(text) } catch { throw new Error('That file is not valid JSON.') }
+  if (!data || typeof data !== 'object' || !Array.isArray((data as Record<string, unknown>).nodes) || !Array.isArray((data as Record<string, unknown>).edges)) {
+    throw new Error('JSON must have "nodes" and "edges" arrays.')
+  }
+  const raw = data as { nodes: unknown[]; edges: unknown[]; title?: unknown }
+  const nodes: MapNode[] = raw.nodes.map((item, index) => {
+    if (!item || typeof item !== 'object') throw new Error(`Node ${index + 1} is not an object.`)
+    const node = item as Record<string, unknown>
+    if (typeof node.id !== 'string' || !node.id) throw new Error(`Node ${index + 1} is missing an id.`)
+    if (node.kind !== 'concept' && node.kind !== 'detail') throw new Error(`Node "${node.id}" kind must be "concept" or "detail".`)
+    if (typeof node.title !== 'string') throw new Error(`Node "${node.id}" is missing a title.`)
+    if (typeof node.x !== 'number' || typeof node.y !== 'number') throw new Error(`Node "${node.id}" is missing numeric x/y.`)
+    return {
+      id: node.id,
+      kind: node.kind,
+      title: node.title,
+      body: typeof node.body === 'string' ? node.body : '',
+      x: node.x,
+      y: node.y,
+      ...(typeof node.longDefinition === 'string' ? { longDefinition: node.longDefinition } : {}),
+    }
+  })
+  const edges: MapEdge[] = raw.edges.map((item, index) => {
+    if (!item || typeof item !== 'object') throw new Error(`Relationship ${index + 1} is not an object.`)
+    const edge = item as Record<string, unknown>
+    if (typeof edge.id !== 'string' || !edge.id) throw new Error(`Relationship ${index + 1} is missing an id.`)
+    if (typeof edge.from !== 'string' || typeof edge.to !== 'string') throw new Error(`Relationship "${edge.id}" is missing a from/to node id.`)
+    return { id: edge.id, from: edge.from, to: edge.to, label: typeof edge.label === 'string' ? edge.label : '' }
+  })
+  const title = typeof raw.title === 'string' ? raw.title : undefined
+  validateGraph(nodes, edges)
+  return { nodes, edges, ...(title !== undefined ? { title } : {}) }
+}
+
+const csvColumns = ['type', 'id', 'kind', 'title', 'body', 'longDefinition', 'x', 'y', 'from', 'to', 'label'] as const
+
+function csvEscape(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+}
+
+function nodesEdgesToCSV(nodes: MapNode[], edges: MapEdge[], title: string): string {
+  const rows = [csvColumns as unknown as string[]]
+  rows.push(['map', '', '', title, '', '', '', '', '', '', ''])
+  for (const node of nodes) rows.push(['node', node.id, node.kind, node.title, node.body, node.longDefinition ?? '', String(node.x), String(node.y), '', '', ''])
+  for (const edge of edges) rows.push(['edge', edge.id, '', '', '', '', '', '', edge.from, edge.to, edge.label])
+  return rows.map((row) => row.map(csvEscape).join(',')).join('\r\n')
+}
+
+function parseCSVText(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[index + 1] === '"') { field += '"'; index += 1 } else inQuotes = false
+      } else field += char
+    } else if (char === '"') inQuotes = true
+    else if (char === ',') { row.push(field); field = '' }
+    else if (char === '\r') { /* ignore, \n closes the row */ }
+    else if (char === '\n') { row.push(field); rows.push(row); row = []; field = '' }
+    else field += char
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row) }
+  return rows.filter((cells) => !(cells.length === 1 && cells[0] === ''))
+}
+
+function csvToNodesEdges(text: string): { nodes: MapNode[]; edges: MapEdge[]; title?: string } {
+  const rows = parseCSVText(text)
+  if (rows.length === 0) throw new Error('CSV file is empty.')
+  const [header, ...body] = rows
+  const columnIndex = (name: string) => header.indexOf(name)
+  for (const name of ['type', 'id']) if (columnIndex(name) === -1) throw new Error(`CSV is missing required column "${name}".`)
+  const nodes: MapNode[] = []
+  const edges: MapEdge[] = []
+  let title: string | undefined
+  body.forEach((row, rowIndex) => {
+    const line = rowIndex + 2
+    const get = (name: string) => { const index = columnIndex(name); return index === -1 ? '' : (row[index] ?? '') }
+    const type = get('type')
+    if (type === 'map') { title = get('title'); return }
+    const id = get('id')
+    if (!id) throw new Error(`Row ${line} is missing an id.`)
+    if (type === 'node') {
+      const kind = get('kind')
+      if (kind !== 'concept' && kind !== 'detail') throw new Error(`Row ${line}: node kind must be "concept" or "detail".`)
+      const x = Number(get('x'))
+      const y = Number(get('y'))
+      if (Number.isNaN(x) || Number.isNaN(y)) throw new Error(`Row ${line}: node x/y must be numbers.`)
+      const longDefinition = get('longDefinition')
+      nodes.push({ id, kind, title: get('title'), body: get('body'), x, y, ...(longDefinition ? { longDefinition } : {}) })
+    } else if (type === 'edge') {
+      edges.push({ id, from: get('from'), to: get('to'), label: get('label') })
+    } else {
+      throw new Error(`Row ${line}: unknown type "${type}" (expected "node", "edge", or "map").`)
+    }
+  })
+  validateGraph(nodes, edges)
+  return { nodes, edges, ...(title !== undefined ? { title } : {}) }
+}
+
 function App() {
   const [nodes, setNodes] = useState(initialNodes)
   const [edges, setEdges] = useState(initialEdges)
+  const [mapTitle, setMapTitle] = useState('Example Concept Atlas')
   const [editing, setEditing] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
@@ -45,9 +165,11 @@ function App() {
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
   const preFocusView = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null)
   const longDefOnFocusRef = useRef<Record<string, string>>({})
   const nodeRefs = useRef<Record<string, HTMLElement | null>>({})
+  const summarizingRef = useRef<Set<string>>(new Set())
 
   const selected = nodes.find((node) => node.id === selectedId)
   const relation = edges.find((edge) => edge.id === relationId)
@@ -153,11 +275,39 @@ function App() {
     if (!contextMenu) return
     const id = `${kind}-${Date.now()}`
     const size = nodeSizes[kind]
-    setNodes((current) => [...current, { id, kind, title: kind === 'concept' ? 'New concept' : 'New detail', body: 'Add a definition or observation here.', x: contextMenu.mapX - size.width / 2, y: contextMenu.mapY - size.height / 2 }])
+    setNodes((current) => [...current, { id, kind, title: kind === 'concept' ? 'New concept' : 'New detail', body: '', x: contextMenu.mapX - size.width / 2, y: contextMenu.mapY - size.height / 2 }])
     setContextMenu(null)
   }
 
   const updateNode = (id: string, changes: Partial<MapNode>) => setNodes((current) => current.map((node) => node.id === id ? { ...node, ...changes } : node))
+
+  const exportAsJSON = () => downloadTextFile('concept-map.json', JSON.stringify({ title: mapTitle, nodes, edges }, null, 2), 'application/json')
+  const exportAsCSV = () => downloadTextFile('concept-map.csv', nodesEdgesToCSV(nodes, edges, mapTitle), 'text/csv')
+
+  const importMap = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? '')
+        const { nodes: importedNodes, edges: importedEdges, title: importedTitle } = file.name.toLowerCase().endsWith('.csv') ? csvToNodesEdges(text) : parseImportedJSON(text)
+        setNodes(importedNodes)
+        setEdges(importedEdges)
+        if (importedTitle) setMapTitle(importedTitle)
+        setSelectedId(null)
+        setFocusedId(null)
+        setRelationId(null)
+        setContextMenu(null)
+        setError('')
+      } catch (importError) {
+        setError(importError instanceof Error ? importError.message : 'Import failed.')
+      }
+    }
+    reader.onerror = () => setError('Could not read that file.')
+    reader.readAsText(file)
+    event.target.value = ''
+  }
 
   const requestSummary = async (node: MapNode, longDefinition: string) => {
     try {
@@ -170,6 +320,15 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    for (const node of nodes) {
+      if (node.id === focusedId || !node.longDefinition || node.body.trim() || summarizingRef.current.has(node.id)) continue
+      summarizingRef.current.add(node.id)
+      requestSummary(node, node.longDefinition).finally(() => summarizingRef.current.delete(node.id))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, focusedId])
+
   const generateDefinition = async (node: MapNode) => {
     setGenerating(node.id); setError('')
     try {
@@ -177,7 +336,6 @@ function App() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Generation failed')
       updateNode(node.id, { longDefinition: data.definition })
-      if (!node.body.trim()) await requestSummary(node, data.definition)
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : 'Generation failed')
     } finally { setGenerating(null) }
@@ -215,7 +373,7 @@ function App() {
       <div className="brand"><span className="brand-mark">✦</span><span>Concept Atlas</span><span className="crumb">/ Workspace</span></div>
       <div className="top-actions"><span className="saved"><span className="save-dot" /> Saved just now</span><button className="icon-button" title="Zoom out" disabled={!!focusedId} onClick={() => setZoom((value) => Math.max(0.55, value - 0.08))}><ZoomOut size={17} /></button><span className="zoom-label">{Math.round(zoom * 100)}%</span><button className="icon-button" title="Zoom in" disabled={!!focusedId} onClick={() => setZoom((value) => Math.min(1.25, value + 0.08))}><ZoomIn size={17} /></button></div>
     </header>
-    <section className="map-header"><div><span className="eyebrow">SUBJECT MAP <span>•</span> 06 NODES</span><h1>Quantum chemistry</h1><div className="canvas-hint"><span className="hint-dot" /> {editing ? 'Right-click anywhere to add a concept or detail' : 'Click an idea to bring it into focus · drag with two fingers to pan'}</div></div><div className="header-actions"><button className="primary-button" onClick={() => setEditing((value) => !value)}>{editing ? <><Eye size={16} /> View map</> : <><Pencil size={16} /> Edit map</>}</button></div></section>
+    <section className="map-header"><div><span className="eyebrow">SUBJECT MAP <span>•</span> {nodes.length} NODE{nodes.length === 1 ? '' : 'S'}</span>{editing ? <input className="map-title-input" value={mapTitle} onChange={(event) => setMapTitle(event.target.value)} aria-label="Map title" /> : <h1>{mapTitle}</h1>}<div className="canvas-hint"><span className="hint-dot" /> {editing ? 'Right-click anywhere to add a concept or detail' : 'Click an idea to bring it into focus · drag with two fingers to pan'}</div></div><div className="header-actions"><button className="ghost-button" title="Export as JSON" onClick={exportAsJSON}><Download size={15} /> JSON</button><button className="ghost-button" title="Export as CSV" onClick={exportAsCSV}><Download size={15} /> CSV</button><button className="ghost-button" title="Import a concept map (.json or .csv)" onClick={() => importInputRef.current?.click()}><Upload size={15} /> Import</button><input ref={importInputRef} type="file" accept=".json,.csv" hidden onChange={importMap} /><button className="primary-button" onClick={() => setEditing((value) => !value)}>{editing ? <><Eye size={16} /> View map</> : <><Pencil size={16} /> Edit map</>}</button></div></section>
     <section className="canvas-wrap">
       <div ref={canvasRef} className={`map-canvas ${editing ? 'is-editing' : 'is-viewing'}`} onPointerMove={onCanvasPointerMove} onPointerUp={() => { setDragging(null); setConnecting(null) }} onPointerDown={() => { setSelectedId(null); setFocusedId(null); setRelationId(null); setContextMenu(null) }} onContextMenu={(event) => { if (!editing) return; event.preventDefault(); const point = getMapPoint(event.clientX, event.clientY); setContextMenu({ x: event.clientX, y: event.clientY, mapX: point.x, mapY: point.y }) }}>
         <div className="map-stage" style={{ width: bounds.width, height: bounds.height, transform: `translate(${pan.x}px, ${pan.y}px) translate(-50%, -50%) scale(${zoom})` }}>
@@ -232,6 +390,7 @@ function App() {
             <input value={node.title} onChange={(event) => updateNode(node.id, { title: event.target.value })} readOnly={!editing} aria-label={`${node.kind} title`} />
             <textarea
               value={showLong ? node.longDefinition : node.body}
+              placeholder={showLong ? 'Add the full definition here.' : 'Add a definition or observation here.'}
               onChange={(event) => updateNode(node.id, showLong ? { longDefinition: event.target.value } : { body: event.target.value })}
               onFocus={() => {
                 if (!editing) return
@@ -241,8 +400,7 @@ function App() {
               onBlur={() => {
                 if (!editing || !node.longDefinition) return
                 const changed = node.longDefinition !== longDefOnFocusRef.current[node.id]
-                const missingSummary = !node.body.trim()
-                if (changed || missingSummary) requestSummary(node, node.longDefinition)
+                if (changed) requestSummary(node, node.longDefinition)
               }}
               readOnly={!editing}
               aria-label={`${node.kind} details`}

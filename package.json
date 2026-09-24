@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"node server/index.js\"",
+    "dev": "concurrently \"vite\" \"node --env-file=.env server/index.js\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "server": "node server/index.js"
+    "server": "node --env-file=.env server/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
